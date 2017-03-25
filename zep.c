@@ -97,7 +97,7 @@ void fatal(char *msg)
 	refresh();
 	endwin();
 	noraw();
-	printf("\nzep: %s\n", msg);
+	printf("\nzep v1.1: %s\n", msg);
 	exit(1);
 }
 
@@ -739,7 +739,7 @@ int main(int argc, char **argv)
 			(key_return->func)();
 		} else {
 			/* allow TAB and NEWLINE, any other control char is 'Not Bound' */
-			if (*input > 31 || *input == 13 || *input == 9)
+			if (*input > 31 || *input == 10 || *input == 9)
 				insert();
                         else {
 				fflush(stdin);

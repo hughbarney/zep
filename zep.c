@@ -14,6 +14,10 @@
 #include <unistd.h>
 #include <termios.h>
 
+#define E_NAME          "zep"
+#define E_VERSION       "v1.2"
+#define E_LABEL         "Zep:"
+
 #define B_MODIFIED	0x01		/* modified buffer */
 #define MSGLINE         (LINES-1)
 #define CHUNK           8096L
@@ -97,7 +101,7 @@ void fatal(char *msg)
 	refresh();
 	endwin();
 	noraw();
-	printf("\nzep v1.1: %s\n", msg);
+	printf("\n" E_NAME " " E_VERSION ": %s\n", msg);
 	exit(1);
 }
 
@@ -374,7 +378,7 @@ void modeline(buffer_t *bp)
 	standout();
 	move(bp->w_top + bp->w_rows, 0);
 	mch = ((bp->b_flags & B_MODIFIED) ? '*' : '=');
-	sprintf(temp, "=%c Zep: == %s ", mch, bp->b_fname);
+	sprintf(temp, "=%c " E_LABEL " == %s ", mch, bp->b_fname);
 	addstr(temp);
 
 	for (i = strlen(temp) + 1; i <= COLS; i++)
@@ -715,7 +719,7 @@ keymap_t keymap[] = {
 
 int main(int argc, char **argv)
 {
-	if (argc != 2) fatal("usage: zep filename\n");
+	if (argc != 2) fatal("usage: " E_NAME " filename\n");
 
 	initscr();	
 	raw();

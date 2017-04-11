@@ -15,7 +15,7 @@
 #include <termios.h>
 
 #define E_NAME          "zep"
-#define E_VERSION       "v1.2"
+#define E_VERSION       "v1.3"
 #define E_LABEL         "Zep:"
 
 #define B_MODIFIED	0x01		/* modified buffer */
@@ -99,8 +99,8 @@ void fatal(char *msg)
 {
 	move(LINES-1, 0);
 	refresh();
-	endwin();
 	noraw();
+	endwin();
 	printf("\n" E_NAME " " E_VERSION ": %s\n", msg);
 	exit(1);
 }
@@ -751,6 +751,9 @@ int main(int argc, char **argv)
 			}
 		}
 	}
+
+	if (scrap != NULL) free(scrap);
+	if (curbp != NULL) free(curbp);
 
 	move(MSGLINE, 0);
 	refresh();

@@ -1,21 +1,17 @@
 /* zep.c,  Zep Emacs, Public Domain, Hugh Barney, 2017, Derived from: Anthony's Editor January 93 */
 
 #include <stdlib.h>
-#include <stdarg.h>
 #include <assert.h>
 #include <curses.h>
 #include <stdio.h>
-#include <sys/types.h>
+#include <fcntl.h>
 #include <sys/stat.h>
-#include <sys/ioctl.h>
 #include <ctype.h>
-#include <limits.h>
 #include <string.h>
 #include <unistd.h>
-#include <termios.h>
 
 #define E_NAME          "zep"
-#define E_VERSION       "v1.4"
+#define E_VERSION       "v1.5"
 #define E_LABEL         "Zep:"
 
 #define B_MODIFIED	0x01		/* modified buffer */

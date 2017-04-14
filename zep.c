@@ -1,5 +1,4 @@
 /* zep.c,  Zep Emacs, Public Domain, Hugh Barney, 2017, Derived from: Anthony's Editor January 93 */
-
 #include <stdlib.h>
 #include <assert.h>
 #include <curses.h>
@@ -11,10 +10,8 @@
 #include <unistd.h>
 
 #define E_NAME          "zep"
-#define E_VERSION       "v1.5"
+#define E_VERSION       "v1.6"
 #define E_LABEL         "Zep:"
-
-#define B_MODIFIED	0x01		/* modified buffer */
 #define MSGLINE         (LINES-1)
 #define CHUNK           8096L
 #define K_BUFFER_LENGTH 256
@@ -48,7 +45,7 @@ typedef struct buffer_t
 	int b_row;                /* cursor row */
 	int b_col;                /* cursor col */
 	char b_fname[MAX_FNAME + 1]; /* filename */
-	char b_flags;             /* buffer flags */
+	char b_modified;          /* was modified */
 } buffer_t;
 
 /*
@@ -64,7 +61,6 @@ int done;
 char_t *input;
 int msgflag;
 char msgline[TEMPBUF];
-
 keymap_t *key_return;
 keymap_t *key_map;
 buffer_t *curbp;
@@ -76,11 +72,10 @@ buffer_t* new_buffer()
 {
 	buffer_t *bp = (buffer_t *)malloc(sizeof(buffer_t));
 	assert(bp != NULL);
-
 	bp->b_point = 0;
 	bp->b_page = 0;
 	bp->b_epage = 0;
-	bp->b_flags = 0;
+	bp->b_modified = 0;
 	bp->b_buf = NULL;
 	bp->b_ebuf = NULL;
 	bp->b_gap = NULL;
@@ -128,11 +123,9 @@ int growgap(buffer_t *bp, point_t n)
 {
 	char_t *new;
 	point_t buflen, newlen, xgap, xegap;
-		
 	assert(bp->b_buf <= bp->b_gap);
 	assert(bp->b_gap <= bp->b_egap);
 	assert(bp->b_egap <= bp->b_ebuf);
-
 	xgap = bp->b_gap - bp->b_buf;
 	xegap = bp->b_egap - bp->b_buf;
 	buflen = bp->b_ebuf - bp->b_buf;
@@ -151,9 +144,7 @@ int growgap(buffer_t *bp, point_t n)
 		if (new == NULL) return msg("Failed to allocate required memory");
 	}
 
-	/* Relocate pointers in new buffer and append the new
-	 * extension to the end of the gap.
-	 */
+	/* Relocate pointers in new buffer and append the new extension to the end of the gap */
 	bp->b_buf = new;
 	bp->b_gap = bp->b_buf + xgap;      
 	bp->b_ebuf = bp->b_buf + buflen;
@@ -194,12 +185,12 @@ void save()
 	if (fwrite(curbp->b_egap, sizeof (char), (size_t) length, fp) != length) 
 		msg("Failed to write file \"%s\".", curbp->b_fname);
 	fclose(fp);
-	curbp->b_flags &= ~B_MODIFIED;
+	curbp->b_modified = 0;
 	msg("File \"%s\" %ld bytes saved.", curbp->b_fname, pos(curbp, curbp->b_ebuf));
 }
 
 /* reads file into buffer at point */
-int insert_file(char *fn, int modflag)
+int insert_file(char *fn)
 {
 	FILE *fp;
 	size_t len;
@@ -207,7 +198,6 @@ int insert_file(char *fn, int modflag)
 
 	if (stat(fn, &sb) < 0) return msg("Failed to find file \"%s\".", fn);
 	if (MAX_SIZE_T < sb.st_size) return msg("File \"%s\" is too big to load.", fn);
-
 	if (curbp->b_egap - curbp->b_gap < sb.st_size * sizeof (char_t) && !growgap(curbp, sb.st_size))
 		return (FALSE);
 	if ((fp = fopen(fn, "r")) == NULL) return msg("Failed to open file \"%s\".", fn);
@@ -216,7 +206,6 @@ int insert_file(char *fn, int modflag)
 	curbp->b_gap += len = fread(curbp->b_gap, sizeof (char), (size_t) sb.st_size, fp);
 
 	if (fclose(fp) != 0) return msg("Failed to close file \"%s\".", fn);
-	curbp->b_flags &= (modflag ? B_MODIFIED : ~B_MODIFIED);
 	msg("File \"%s\" %ld bytes read.", fn, len);
 	return (TRUE);
 }
@@ -227,7 +216,6 @@ char_t *get_key(keymap_t *keys, keymap_t **key_return)
 	int submatch;
 	static char_t buffer[K_BUFFER_LENGTH];
 	static char_t *record = buffer;
-
 	*key_return = NULL;
 
 	/* if recorded bytes remain, return next recorded byte. */
@@ -247,7 +235,6 @@ char_t *get_key(keymap_t *keys, keymap_t **key_return)
 		/* if recorded bytes match any multi-byte sequence... */
 		for (k = keys, submatch = 0; k->key_bytes != NULL; ++k) {
 			char_t *p, *q;
-
 			for (p = buffer, q = (char_t *)k->key_bytes; *p == *q; ++p, ++q) {
 			        /* an exact match */
 				if (*q == '\0' && *p == '\0') {
@@ -289,7 +276,7 @@ point_t segstart(buffer_t *bp, point_t start, point_t finish)
 		p = ptr(bp, scan);
 		if (*p == '\n') {
 			c = 0;
-			start = scan+1;
+			start = scan + 1;
 		} else if (COLS <= c) {
 			c = 0;
 			start = scan;
@@ -309,11 +296,9 @@ point_t segnext(buffer_t *bp, point_t start, point_t finish)
 	point_t scan = segstart(bp, start, finish);
 	for (;;) {
 		p = ptr(bp, scan);
-		if (bp->b_ebuf <= p || COLS <= c)
-			break;
+		if (bp->b_ebuf <= p || COLS <= c) break;
 		++scan;
-		if (*p == '\n')
-			break;
+		if (*p == '\n') break;
 		c += *p == '\t' ? 8 - (c & 7) : 1;
 	}
 	return (p < bp->b_ebuf ? scan : pos(bp, bp->b_ebuf));
@@ -332,10 +317,7 @@ point_t upup(buffer_t *bp, point_t off)
 }
 
 /* Move down one screen line */
-point_t dndn(buffer_t *bp, point_t off)
-{
-	return (segnext(bp, lnstart(bp,off), off));
-}
+point_t dndn(buffer_t *bp, point_t off) { return (segnext(bp, lnstart(bp,off), off)); }
 
 /* Return the offset of a column on the specified line */
 point_t lncolumn(buffer_t *bp, point_t offset, int column)
@@ -357,10 +339,9 @@ void modeline(buffer_t *bp)
 	
 	standout();
 	move(bp->w_top + bp->w_rows, 0);
-	mch = ((bp->b_flags & B_MODIFIED) ? '*' : '=');
+	mch = bp->b_modified ? '*' : '=';
 	sprintf(temp, "=%c " E_LABEL " == %s ", mch, bp->b_fname);
 	addstr(temp);
-
 	for (i = strlen(temp) + 1; i <= COLS; i++)
 		addch('=');
 	standend();
@@ -430,8 +411,7 @@ void display()
 		}
 		if (*p == '\n' || COLS <= j) {
 			j -= COLS;
-			if (j < 0)
-				j = 0;
+			if (j < 0) j = 0;
 			++i;
 		}
 		++bp->b_epage;
@@ -489,7 +469,7 @@ void insert()
 	curbp->b_point = movegap(curbp, curbp->b_point);
 	*curbp->b_gap++ = *input == '\r' ? '\n' : *input;
 	curbp->b_point = pos(curbp, curbp->b_egap);
-	curbp->b_flags |= B_MODIFIED;
+	curbp->b_modified = 1;
 }
 
 void backsp()
@@ -497,7 +477,7 @@ void backsp()
 	curbp->b_point = movegap(curbp, curbp->b_point);
 	if (curbp->b_buf < curbp->b_gap) {
 		--curbp->b_gap;
-		curbp->b_flags |= B_MODIFIED;
+		curbp->b_modified = 1;
 	}
 	curbp->b_point = pos(curbp, curbp->b_egap);
 }
@@ -507,7 +487,7 @@ void delete()
 	curbp->b_point = movegap(curbp, curbp->b_point);
 	if (curbp->b_egap < curbp->b_ebuf) {
 		curbp->b_point = pos(curbp, ++curbp->b_egap);
-		curbp->b_flags |= B_MODIFIED;
+		curbp->b_modified = 1;
 	}
 }
 
@@ -544,7 +524,7 @@ void copy_cut(int cut)
 		if (cut) {
 			curbp->b_egap += nscrap; /* if cut expand gap down */
 			curbp->b_point = pos(curbp, curbp->b_egap); /* set point to after region */
-			curbp->b_flags |= B_MODIFIED;
+			curbp->b_modified = 1;
 			msg("%ld bytes cut.", nscrap);
 		} else {
 			msg("%ld bytes copied.", nscrap);
@@ -562,7 +542,7 @@ void paste()
 		memcpy(curbp->b_gap, scrap, nscrap * sizeof (char_t));
 		curbp->b_gap += nscrap;
 		curbp->b_point = pos(curbp, curbp->b_egap);
-		curbp->b_flags |= B_MODIFIED;
+		curbp->b_modified = 1;
 	}
 }
 
@@ -594,10 +574,8 @@ point_t search_forward(buffer_t *bp, point_t start_p, char *stext)
 		for (s=stext, pp=p; *s == *(ptr(bp, pp)) && *s !='\0' && pp < end_p; s++, pp++)
 			;
 
-		if (*s == '\0')
-			return pp;
+		if (*s == '\0') return pp;
 	}
-
 	return -1;
 }
 
@@ -607,7 +585,6 @@ void search()
 	int c;
 	point_t o_point = curbp->b_point;
 	point_t found;
-
 	searchtext[0] = '\0';
 	msg("Search: %s", searchtext);
 	dispmsg();
@@ -704,37 +681,28 @@ int main(int argc, char **argv)
 	initscr();	
 	raw();
 	noecho();
-	
 	curbp = new_buffer();
-	(void)insert_file(argv[1], FALSE);
-	/* Save filename irregardless of load() success. */
-	strncpy(curbp->b_fname, argv[1], MAX_FNAME);
+	(void)insert_file(argv[1]);
+	strncpy(curbp->b_fname, argv[1], MAX_FNAME);  /* save filename regardless */
 	curbp->b_fname[MAX_FNAME] = '\0'; /* force truncation */
-
 	if (!growgap(curbp, CHUNK)) fatal("Failed to allocate required memory.\n");
-
 	key_map = keymap;
 
 	while (!done) {
 		display();
 		input = get_key(key_map, &key_return);
-
 		if (key_return != NULL) {
 			(key_return->func)();
 		} else {
-			/* allow TAB and NEWLINE, any other control char is 'Not Bound' */
-			if (*input > 31 || *input == 10 || *input == 9)
+			if (*input > 31 || *input == 10 || *input == 9) /* allow TAB, NEWLINE and other control char is Not Bound */
 				insert();
-                        else {
-				fflush(stdin);
+                        else
 				msg("Not bound");
-			}
 		}
 	}
 
 	if (scrap != NULL) free(scrap);
 	if (curbp != NULL) free(curbp);
-
 	noraw();
 	endwin();
 	return 0;

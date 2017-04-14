@@ -15,7 +15,7 @@
 #include <termios.h>
 
 #define E_NAME          "zep"
-#define E_VERSION       "v1.3"
+#define E_VERSION       "v1.4"
 #define E_LABEL         "Zep:"
 
 #define B_MODIFIED	0x01		/* modified buffer */
@@ -68,7 +68,7 @@ int done;
 char_t *input;
 int msgflag;
 char msgline[TEMPBUF];
-char temp[TEMPBUF];
+
 keymap_t *key_return;
 keymap_t *key_map;
 buffer_t *curbp;
@@ -97,21 +97,20 @@ buffer_t* new_buffer()
 
 void fatal(char *msg)
 {
-	move(LINES-1, 0);
-	refresh();
 	noraw();
 	endwin();
 	printf("\n" E_NAME " " E_VERSION ": %s\n", msg);
 	exit(1);
 }
 
-void msg(char *msg, ...)
+int msg(char *msg, ...)
 {
 	va_list args;
 	va_start(args, msg);
 	(void)vsprintf(msgline, msg, args);
 	va_end(args);
 	msgflag = TRUE;
+	return FALSE;
 }
 
 /* Given a buffer offset, convert it to a pointer into the buffer */
@@ -147,19 +146,13 @@ int growgap(buffer_t *bp, point_t n)
 	newlen = buflen + n * sizeof (char_t);
 
 	if (buflen == 0) {
-		if (newlen < 0 || MAX_SIZE_T < newlen) fatal("Failed to allocate required memory.\n");
+		if (newlen < 0 || MAX_SIZE_T < newlen) fatal("Failed to allocate required memory");
 		new = (char_t*) malloc((size_t) newlen);
-		if (new == NULL) fatal("Failed to allocate required memory.\n");
+		if (new == NULL) fatal("Failed to allocate required memory");
 	} else {
-		if (newlen < 0 || MAX_SIZE_T < newlen) {
-			msg("Failed to allocate required memory");
-			return (FALSE);
-		}
+		if (newlen < 0 || MAX_SIZE_T < newlen) return msg("Failed to allocate required memory");
 		new = (char_t*) realloc(bp->b_buf, (size_t) newlen);
-		if (new == NULL) {
-			msg("Failed to allocate required memory");    /* Report non-fatal error. */
-			return (FALSE);
-		}
+		if (new == NULL) return msg("Failed to allocate required memory");
 	}
 
 	/* Relocate pointers in new buffer and append the new
@@ -216,27 +209,17 @@ int insert_file(char *fn, int modflag)
 	size_t len;
 	struct stat sb;
 
-	if (stat(fn, &sb) < 0) {
-		msg("Failed to find file \"%s\".", fn);
-		return (FALSE);
-	}
-	if (MAX_SIZE_T < sb.st_size) {
-		msg("File \"%s\" is too big to load.", fn);
-		return (FALSE);
-	}
+	if (stat(fn, &sb) < 0) return msg("Failed to find file \"%s\".", fn);
+	if (MAX_SIZE_T < sb.st_size) return msg("File \"%s\" is too big to load.", fn);
+
 	if (curbp->b_egap - curbp->b_gap < sb.st_size * sizeof (char_t) && !growgap(curbp, sb.st_size))
 		return (FALSE);
-	if ((fp = fopen(fn, "r")) == NULL) {
-		msg("Failed to open file \"%s\".", fn);
-		return (FALSE);
-	}
+	if ((fp = fopen(fn, "r")) == NULL) return msg("Failed to open file \"%s\".", fn);
+
 	curbp->b_point = movegap(curbp, curbp->b_point);
 	curbp->b_gap += len = fread(curbp->b_gap, sizeof (char), (size_t) sb.st_size, fp);
 
-	if (fclose(fp) != 0) {
-		msg("Failed to close file \"%s\".", fn);
-		return (FALSE);
-	}
+	if (fclose(fp) != 0) return msg("Failed to close file \"%s\".", fn);
 	curbp->b_flags &= (modflag ? B_MODIFIED : ~B_MODIFIED);
 	msg("File \"%s\" %ld bytes read.", fn, len);
 	return (TRUE);
@@ -373,6 +356,7 @@ point_t lncolumn(buffer_t *bp, point_t offset, int column)
 void modeline(buffer_t *bp)
 {
 	int i;
+	char temp[TEMPBUF];
 	char mch;
 	
 	standout();
@@ -755,8 +739,6 @@ int main(int argc, char **argv)
 	if (scrap != NULL) free(scrap);
 	if (curbp != NULL) free(curbp);
 
-	move(MSGLINE, 0);
-	refresh();
 	noraw();
 	endwin();
 	return 0;

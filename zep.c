@@ -49,11 +49,10 @@ typedef struct buffer_t
 } buffer_t;
 
 /*
- * Some compilers define size_t as a unsigned 16 bit number while
- * point_t and off_t might be defined as a signed 32 bit number.  
- * malloc(), realloc(), fread(), and fwrite() take size_t parameters,
- * which means there will be some size limits because size_t is too
- * small of a type.
+ * Some compilers define size_t as a unsigned 16 bit number while point_t and
+ * off_t might be defined as a signed 32 bit number. malloc(), realloc(),
+ * fread(), and fwrite() take size_t parameters, which means there will be some
+ * size limits because size_t is too small of a type.
  */
 #define MAX_SIZE_T      ((unsigned long) (size_t) ~0)
 
@@ -73,6 +72,7 @@ buffer_t* new_buffer()
 	buffer_t *bp = (buffer_t *)malloc(sizeof(buffer_t));
 	assert(bp != NULL);
 	bp->b_point = 0;
+	bp->b_mark = NOMARK;
 	bp->b_page = 0;
 	bp->b_epage = 0;
 	bp->b_modified = 0;
@@ -177,7 +177,6 @@ void save()
 {
 	FILE *fp;
 	point_t length;
-
 	fp = fopen(curbp->b_fname, "w");
 	if (fp == NULL) msg("Failed to open file \"%s\".", curbp->b_fname);
 	(void) movegap(curbp, (point_t) 0);
@@ -201,10 +200,8 @@ int insert_file(char *fn)
 	if (curbp->b_egap - curbp->b_gap < sb.st_size * sizeof (char_t) && !growgap(curbp, sb.st_size))
 		return (FALSE);
 	if ((fp = fopen(fn, "r")) == NULL) return msg("Failed to open file \"%s\".", fn);
-
 	curbp->b_point = movegap(curbp, curbp->b_point);
 	curbp->b_gap += len = fread(curbp->b_gap, sizeof (char), (size_t) sb.st_size, fp);
-
 	if (fclose(fp) != 0) return msg("Failed to close file \"%s\".", fn);
 	msg("File \"%s\" %ld bytes read.", fn, len);
 	return (TRUE);
@@ -223,13 +220,11 @@ char_t *get_key(keymap_t *keys, keymap_t **key_return)
 		*key_return = NULL;
 		return record++;
 	}
-	/* reset record buffer. */
-	record = buffer;
-
+	
+	record = buffer; /* reset record buffer. */
 	do {
 		assert(K_BUFFER_LENGTH > record - buffer);
-		/* read and record one byte. */
-		*record++ = (unsigned)getch();
+		*record++ = (unsigned)getch(); /* read and record one byte. */
 		*record = '\0';
 
 		/* if recorded bytes match any multi-byte sequence... */
@@ -245,9 +240,7 @@ char_t *get_key(keymap_t *keys, keymap_t **key_return)
 				}
 			}
 			/* record bytes match part of a command sequence */
-			if (*p == '\0' && *q != '\0') {
-				submatch = 1;
-			}
+			if (*p == '\0' && *q != '\0') submatch = 1;
 		}
 	} while (submatch);
 	/* nothing matched, return recorded bytes. */
@@ -567,13 +560,11 @@ point_t search_forward(buffer_t *bp, point_t start_p, char *stext)
 	point_t p,pp;
 	char* s;
 
-	if (0 == strlen(stext))
-		return start_p;
+	if (0 == strlen(stext)) return start_p;
 
 	for (p=start_p; p < end_p; p++) {
 		for (s=stext, pp=p; *s == *(ptr(bp, pp)) && *s !='\0' && pp < end_p; s++, pp++)
 			;
-
 		if (*s == '\0') return pp;
 	}
 	return -1;
@@ -677,7 +668,6 @@ keymap_t keymap[] = {
 int main(int argc, char **argv)
 {
 	if (argc != 2) fatal("usage: " E_NAME " filename\n");
-
 	initscr();	
 	raw();
 	noecho();
